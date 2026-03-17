@@ -6,7 +6,10 @@ OSIsoft PI AF SDK wrapper with DuckDB caching and SPC control charts.
 
 - **`pi_spc.pi`** — Pythonic wrapper around the OSIsoft AF SDK (.NET via pythonnet): connect to PI, search event frames, bulk-fetch recorded/interpolated values
 - **`pi_spc.cache`** — Smart DuckDB cache layer for PI time-series data: automatic fetch-on-miss, partial-overlap detection, tag-level cache management
-- **`pi_spc.viz`** — Statistical Process Control charts built on Altair: X̄-S, I-MR, Pareto, and batch timeline (Gantt)
+- **`pi_spc.viz`** — Statistical Process Control charts built on Altair: X̄-S, I-MR, Pareto, batch timeline, and stem-level layout
+- **`pi_spc.stats`** — Robust descriptive statistics (Bowley skewness) for detecting distributional shifts
+- **`pi_spc.transforms`** — Data transformations: state-change → interval conversion, mode/state filtering via asof joins
+- **`pi_spc.utils`** — General helpers: human-readable timedelta formatting
 
 ## Prerequisites
 
@@ -81,6 +84,27 @@ chart.display()
 | `xbar_s_chart(df, ...)` | X̄-S chart for batch-level subgroup statistics |
 | `pareto_chart(df, ...)` | Pareto bar chart with cumulative percentage line |
 | `batch_timeline(df, ...)` | Interactive Gantt-style batch timeline |
+| `assign_stem_levels(midpoints, ...)` | Greedy stem-level layout for lollipop/timeline charts |
+
+### `pi_spc.stats` — Statistics
+
+| Function | Description |
+|---|---|
+| `bowley_skewness(values, ...)` | Quartile-based skewness — robust to outliers, detects asymmetry in the middle 50% |
+
+### `pi_spc.transforms` — Data Transformations
+
+| Function | Description |
+|---|---|
+| `state_to_intervals(df, ...)` | Convert state-change signals (0→1→0) into `(Start, End)` time intervals |
+| `filter_by_mode(pv_df, mode_df, ...)` | Filter process data to rows matching allowed HMI modes via backward asof join |
+| `filter_by_mode_and_state(pv_df, mode_df, state_df, ...)` | Dual-gate filter: mode + secondary state signal, with fallback |
+
+### `pi_spc.utils` — Utilities
+
+| Function | Description |
+|---|---|
+| `format_timedelta(td)` | Human-readable timedelta string (e.g. `"2 days 3 hours 15 mins"`) |
 
 ## Configuration
 

@@ -27,10 +27,77 @@ __all__ = [
     "batch_timeline",
     "xbar_s_chart",
     "imr_chart",
+    "assign_stem_levels",
     "IMR_SIGMA_MULTIPLIER",
     "MR_UCL_MULTIPLIER",
     "S_UCL_MULTIPLIER",
 ]
+
+
+def assign_stem_levels(
+    midpoints: list,
+    range_fraction: float = 0.12,
+    *,
+    initial_levels: int = 4,
+    max_levels: int = 16,
+    outer_bound: float = 4.5,
+    inner_bound: float = 0.6,
+) -> list[float]:
+    """Assign vertical stem levels for a lollipop/timeline chart.
+
+    Greedily places each point above or below a centerline, alternating
+    sides and growing the number of available levels when all slots are
+    occupied by close neighbours — up to a hard cap.
+
+    Args:
+        midpoints: Sequence of datetime-like objects (must support
+            ``.timestamp()``).  One per event to place.
+        range_fraction: Fraction of the total time range that defines the
+            "collision zone" around each placed point.
+        initial_levels: Starting number of levels per side (above/below).
+        max_levels: Hard cap on levels per side.
+        outer_bound: Outermost stem distance from centerline.
+        inner_bound: Closest stem distance to centerline.
+
+    Returns:
+        List of float stem levels (positive = above, negative = below),
+        one per element in *midpoints*.
+    """
+    if len(midpoints) < 2:
+        return [2.0] * len(midpoints)
+
+    _ts = [mp.timestamp() for mp in midpoints]
+    _gap_s = (max(_ts) - min(_ts)) * range_fraction
+
+    def _make_slots(n):
+        step = (outer_bound - inner_bound) / max(n - 1, 1) if n > 1 else 0
+        return [round(outer_bound - step * k, 2) for k in range(n)]
+
+    _pos = _make_slots(initial_levels)
+    _neg = [-v for v in _pos]
+
+    _levels, _history = [], []
+    for i, ts in enumerate(_ts):
+        _occupied = {lvl for _prev_ts, lvl in _history if abs(ts - _prev_ts) < _gap_s}
+        _pool = _pos + _neg if i % 2 == 0 else _neg + _pos
+        _chosen = next((l for l in _pool if l not in _occupied), None)
+
+        if _chosen is None and len(_pos) < max_levels:
+            _pos = _make_slots(len(_pos) + 1)
+            _neg = [-v for v in _pos]
+            _pool = _pos + _neg if i % 2 == 0 else _neg + _pos
+            _chosen = next((l for l in _pool if l not in _occupied), None)
+
+        if _chosen is None:
+            _last_used = {}
+            for _prev_ts, lvl in _history:
+                if lvl not in _last_used or _prev_ts > _last_used[lvl]:
+                    _last_used[lvl] = _prev_ts
+            _chosen = min(_pool, key=lambda l: _last_used.get(l, 0))
+
+        _levels.append(_chosen)
+        _history.append((ts, _chosen))
+    return _levels
 
 
 def pareto_chart(
