@@ -25,7 +25,7 @@ uv pip install pi-spc
 Or from source:
 
 ```bash
-uv pip install git+https://github.com/joshuagorton/pi-spc.git
+uv pip install git+https://github.com/AtlasHasFallen/pi-spc.git
 ```
 
 ## Quick Start
