@@ -83,7 +83,8 @@ chart.display()
 | `imr_chart(df, ...)` | Individuals & Moving Range chart with optional spec limits and distribution panel |
 | `xbar_s_chart(df, ...)` | X̄-S chart for batch-level subgroup statistics |
 | `pareto_chart(df, ...)` | Pareto bar chart with cumulative percentage line |
-| `batch_timeline(df, ...)` | Interactive Gantt-style batch timeline |
+| `batch_timeline(df, ...)` | Interactive Gantt-style batch timeline (Plotly) |
+| `stem_timeline(df, ...)` | Single-axis stem/lollipop timeline with adaptive date axis, click/brush selection |
 | `assign_stem_levels(midpoints, ...)` | Greedy stem-level layout for lollipop/timeline charts |
 
 ### `pi_spc.stats` — Statistics

@@ -25,6 +25,7 @@ S_UCL_MULTIPLIER = 2.266         # UCL_S = 2.266 * S_bar
 __all__ = [
     "pareto_chart",
     "batch_timeline",
+    "stem_timeline",
     "xbar_s_chart",
     "imr_chart",
     "assign_stem_levels",
@@ -98,6 +99,272 @@ def assign_stem_levels(
         _levels.append(_chosen)
         _history.append((ts, _chosen))
     return _levels
+
+
+def stem_timeline(
+    df: pl.DataFrame,
+    midpoint_col: str = "Midpoint",
+    batch_col: str = "Batch",
+    color_col: str | None = "Recipe",
+    tooltip_cols: list[str] | None = None,
+    *,
+    width: int | str = "container",
+    min_height: int = 160,
+    height_per_level: int = 36,
+    range_fraction: float = 0.12,
+    initial_levels: int = 4,
+    max_levels: int = 16,
+    outer_bound: float = 4.5,
+    inner_bound: float = 0.6,
+    label_font_size: int = 11,
+    dot_size: int = 60,
+    stem_width: float = 1.5,
+    title: str = "Batch Timeline",
+    brush_selection: bool = True,
+    click_selection: bool = True,
+) -> alt.LayerChart:
+    """Create a single-axis stem (lollipop) timeline with adaptive date axis.
+
+    Places events along a horizontal time axis with alternating stems above
+    and below a centerline.  Automatically selects date-axis granularity
+    based on the time span and scales chart height with the number of stem
+    levels used.
+
+    Args:
+        df: DataFrame with at least *midpoint_col* and *batch_col*.
+        midpoint_col: Column with datetime midpoints for each event.
+        batch_col: Column with event/batch labels shown on stems.
+        color_col: Column for color encoding (e.g. recipe or product).
+            Set to ``None`` to disable.
+        tooltip_cols: Extra columns to include in the tooltip.  If ``None``,
+            defaults to ``[batch_col]`` (plus *color_col* if set).
+        width: Chart width (int pixels or ``"container"``).
+        min_height: Minimum chart height in pixels.
+        height_per_level: Pixels added per stem level used.
+        range_fraction: Collision zone fraction for stem placement.
+        initial_levels: Starting stem levels per side (above/below center).
+        max_levels: Hard cap on levels per side.
+        outer_bound: Outermost stem distance from centerline.
+        inner_bound: Closest stem distance to centerline.
+        label_font_size: Font size for batch labels on stems.
+        dot_size: Size of the dots on the centerline.
+        stem_width: Width of the vertical stem bars.
+        title: Chart title.
+        brush_selection: Enable interval (brush) selection on the x-axis.
+        click_selection: Enable point (click) selection on batches.
+
+    Returns:
+        An Altair ``LayerChart`` with centerline, stems, dots, labels, and
+        an adaptive two-tier date axis.
+
+    Example::
+
+        >>> from pi_spc.viz import stem_timeline
+        >>> chart = stem_timeline(batch_df, midpoint_col="Midpoint", batch_col="Batch")
+        >>> chart.display()
+    """
+    midpoints = df[midpoint_col].to_list()
+    if not midpoints:
+        return alt.Chart(df).mark_point().encode().properties(title=title)
+
+    # ── Stem level assignment ──
+    levels = assign_stem_levels(
+        midpoints,
+        range_fraction=range_fraction,
+        initial_levels=initial_levels,
+        max_levels=max_levels,
+        outer_bound=outer_bound,
+        inner_bound=inner_bound,
+    )
+    used_levels = len(set(abs(l) for l in levels)) if levels else 1
+    max_level = max(abs(l) for l in levels) + 0.9 if levels else 4.0
+    chart_height = max(min_height, used_levels * height_per_level)
+    label_offset = min(0.8, 3.0 / max(used_levels, 1) * 0.5)
+
+    plot_df = df.with_columns([
+        pl.Series("_level", levels, dtype=pl.Float64),
+        pl.Series(
+            "_label_y",
+            [l + label_offset if l > 0 else l - label_offset for l in levels],
+            dtype=pl.Float64,
+        ),
+        pl.lit(0.0).alias("_y0"),
+    ])
+    y_scale = alt.Scale(domain=[-max_level, max_level])
+
+    # ── Selections ──
+    params: list = []
+    if brush_selection:
+        tl_sel = alt.selection_interval(encodings=["x"])
+        params.append(tl_sel)
+        tl_opacity = alt.condition(tl_sel, alt.value(1.0), alt.value(0.3))
+        stem_opacity = alt.condition(tl_sel, alt.value(0.4), alt.value(0.15))
+    else:
+        tl_opacity = alt.value(1.0)
+        stem_opacity = alt.value(0.4)
+
+    if click_selection:
+        batch_sel = alt.selection_point(fields=[batch_col])
+        params.append(batch_sel)
+        click_opacity = alt.condition(batch_sel, alt.value(1.0), alt.value(0.3))
+    else:
+        click_opacity = alt.value(1.0)
+
+    # Combine opacities: use the most restrictive
+    if brush_selection and click_selection:
+        dot_opacity = tl_opacity
+    elif brush_selection:
+        dot_opacity = tl_opacity
+    elif click_selection:
+        dot_opacity = click_opacity
+    else:
+        dot_opacity = alt.value(1.0)
+
+    # ── Color encoding ──
+    color_enc = (
+        alt.Color(f"{color_col}:N", legend=alt.Legend(orient="bottom"))
+        if color_col and color_col in df.columns
+        else alt.value("steelblue")
+    )
+
+    # ── Adaptive axis granularity ──
+    span_days = (
+        (max(midpoints) - min(midpoints)).total_seconds() / 86400
+        if len(midpoints) > 1
+        else 0
+    )
+
+    if span_days <= 14:
+        x_primary = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                tickCount="day", labels=False, grid=True,
+                gridDash=[2, 2], domain=False,
+            ),
+        )
+        x_band = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                format="%a %d %b", tickCount="day", labelAngle=0,
+                grid=False, orient="bottom", domain=False,
+            ),
+        )
+    elif span_days <= 90:
+        x_primary = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                tickCount="day", labels=False, grid=False, domain=False,
+            ),
+        )
+        x_band = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                format="%d %b %Y", tickCount="month", labelAngle=0,
+                grid=True, orient="bottom", domain=False,
+            ),
+        )
+    elif span_days <= 365:
+        x_primary = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                tickCount="month", labels=False, grid=True,
+                gridDash=[2, 2], domain=False,
+            ),
+        )
+        x_band = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                format="%b %Y", tickCount="month", labelAngle=0,
+                grid=True, orient="bottom", domain=False,
+            ),
+        )
+    else:
+        x_primary = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                tickCount={"interval": "month", "step": 2}, labels=False,
+                grid=True, gridDash=[2, 2], domain=False,
+            ),
+        )
+        x_band = alt.X(
+            f"{midpoint_col}:T", title="",
+            axis=alt.Axis(
+                format="%b %Y",
+                tickCount={"interval": "month", "step": 2},
+                labelAngle=-45, grid=True, orient="bottom", domain=False,
+            ),
+        )
+
+    # ── Tooltip ──
+    if tooltip_cols is None:
+        tooltip_cols = [batch_col]
+        if color_col and color_col in df.columns:
+            tooltip_cols.append(color_col)
+    tt = [alt.Tooltip(f"{c}:N") for c in tooltip_cols]
+
+    # ── Chart layers ──
+    centerline = (
+        alt.Chart(pl.DataFrame({"_y0": [0.0]}))
+        .mark_rule(color="#888", strokeWidth=0.8)
+        .encode(y=alt.Y("_y0:Q", scale=y_scale, axis=None))
+    )
+
+    stems = (
+        alt.Chart(plot_df)
+        .mark_bar(width=stem_width)
+        .encode(
+            x=x_primary,
+            y=alt.Y("_level:Q", scale=y_scale, axis=None),
+            y2=alt.Y2("_y0"),
+            color=color_enc,
+            opacity=stem_opacity,
+        )
+    )
+
+    dots = (
+        alt.Chart(plot_df)
+        .mark_circle(size=dot_size)
+        .encode(
+            x=x_primary,
+            y=alt.Y("_y0:Q", scale=y_scale, axis=None),
+            color=color_enc,
+            opacity=dot_opacity,
+            tooltip=tt,
+        )
+    )
+
+    labels = (
+        alt.Chart(plot_df)
+        .mark_text(
+            fontSize=label_font_size, fontWeight="bold", align="center",
+        )
+        .encode(
+            x=x_primary,
+            y=alt.Y("_label_y:Q", scale=y_scale, axis=None),
+            text=alt.Text(f"{batch_col}:N"),
+            color=color_enc,
+            opacity=dot_opacity,
+        )
+    )
+
+    # Invisible layer for the second (bottom) axis
+    band_axis = (
+        alt.Chart(plot_df)
+        .mark_point(opacity=0)
+        .encode(x=x_band)
+    )
+
+    chart = (
+        alt.layer(centerline, stems, dots, labels, band_axis)
+        .resolve_axis(x="independent")
+        .properties(title=title, width=width, height=chart_height)
+        .configure_view(strokeWidth=0)
+    )
+
+    if params:
+        chart = chart.add_params(*params)
+
+    return chart
 
 
 def pareto_chart(

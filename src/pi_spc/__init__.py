@@ -37,6 +37,7 @@ from pi_spc.viz import (
     batch_timeline,
     imr_chart,
     pareto_chart,
+    stem_timeline,
     xbar_s_chart,
 )
 
@@ -65,6 +66,7 @@ __all__ = [
     # viz
     "pareto_chart",
     "batch_timeline",
+    "stem_timeline",
     "xbar_s_chart",
     "imr_chart",
     "assign_stem_levels",
