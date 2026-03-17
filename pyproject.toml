@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pi-spc"
+version = "0.1.0"
+description = "OSIsoft PI AF SDK wrapper with DuckDB caching and SPC control charts"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Joshua Gorton" },
+]
+keywords = ["osisoft", "pi", "spc", "control-chart", "duckdb", "altair"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "polars>=1.0",
+    "duckdb>=0.10",
+    "altair>=5.0",
+    "pythonnet>=3.0",
+]
+
+[project.optional-dependencies]
+plotly = ["plotly>=5.0"]
+all = ["pi-spc[plotly]"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/joshuagorton/pi-spc"
+Repository = "https://github.com/joshuagorton/pi-spc"
+Issues = "https://github.com/joshuagorton/pi-spc/issues"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
