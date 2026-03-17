@@ -19,13 +19,13 @@ OSIsoft PI AF SDK wrapper with DuckDB caching and SPC control charts.
 ## Installation
 
 ```bash
-pip install pi-spc
+uv pip install pi-spc
 ```
 
 Or from source:
 
 ```bash
-pip install git+https://github.com/joshuagorton/pi-spc.git
+uv pip install git+https://github.com/joshuagorton/pi-spc.git
 ```
 
 ## Quick Start
